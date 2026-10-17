@@ -1,0 +1,3 @@
+[install]
+# Refuse package versions younger than 3 days, so malicious releases get flagged before they land.
+minimumReleaseAge = 259200

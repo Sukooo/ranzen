@@ -1,0 +1,83 @@
+{
+	"name": "@ranzenjs/client",
+	"version": "0.1.0",
+	"description": "Typed client for Schulportal Hessen (SPH, LANIS)",
+	"license": "MIT",
+	"author": "Suko",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Sukooo/ranzen.git"
+	},
+	"homepage": "https://github.com/Sukooo/ranzen#readme",
+	"publishConfig": {
+		"access": "public"
+	},
+	"bugs": "https://github.com/Sukooo/ranzen/issues",
+	"keywords": [
+		"schulportal",
+		"hessen",
+		"sph",
+		"lanis"
+	],
+	"type": "module",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./lessons": {
+			"types": "./dist/apps/lessons/index.d.ts",
+			"default": "./dist/apps/lessons/index.js"
+		},
+		"./substitutions": {
+			"types": "./dist/apps/substitutions/index.d.ts",
+			"default": "./dist/apps/substitutions/index.js"
+		},
+		"./profile": {
+			"types": "./dist/apps/profile/index.d.ts",
+			"default": "./dist/apps/profile/index.js"
+		},
+		"./catalog": {
+			"types": "./dist/apps/catalog/index.d.ts",
+			"default": "./dist/apps/catalog/index.js"
+		},
+		"./html": {
+			"types": "./dist/html.d.ts",
+			"default": "./dist/html.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"engines": {
+		"node": ">=22.1"
+	},
+	"packageManager": "bun@1.3.14",
+	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/smoke.js",
+		"check": "tsc -p tsconfig.json",
+		"test": "bun test --isolate",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"canary": "bun scripts/canary.ts",
+		"prepublishOnly": "bun run format:check && bun run check && bun run test && bun run build"
+	},
+	"dependencies": {
+		"css-select": "^7.0.0",
+		"domhandler": "^6.0.1",
+		"htmlparser2": "^12.0.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"@types/node": "^25.5.0",
+		"prettier": "^3.9.6",
+		"typescript": "^7.0.2"
+	},
+	"prettier": {
+		"printWidth": 100,
+		"singleQuote": true,
+		"trailingComma": "none",
+		"useTabs": true
+	}
+}
