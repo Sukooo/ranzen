@@ -129,6 +129,7 @@ test('reads a course with its history, marks and attendance', () => {
 });
 
 test('reads legacy layouts of semester links, periods, names and comments', () => {
+	const { drift, details } = driftLog();
 	const course = parseCourse(
 		parseHtml(`
 		<h1 data-book="101">Mathe</h1>
@@ -140,15 +141,52 @@ test('reads legacy layouts of semester links, periods, names and comments', () =
 		<div id="marks"><table>
 			<tr><td>Klausur 1<td>Do, 17.09.<td>12
 			<tr><td><td colspan="2">Bemerkung: gut: sehr
-		</table></div>`),
-		'101'
+		</table></div>
+		<div id="klausuren"></div><table id="attendanceTable"></table>`),
+		'101',
+		drift
 	);
+	expect(details).toEqual([]);
 	expect(course).toMatchObject({
 		firstSemester: '99',
 		teachers: [{ code: 'MUS', firstName: 'Max, Dr.', lastName: 'Muster' }],
 		marks: [{ name: 'Klausur 1', comment: 'gut: sehr' }]
 	});
 	expect(course.entries[0]?.periods).toEqual({ from: 1, to: 2, label: '1.-2.' });
+});
+
+test('rejects look-alike semester links, periods and comment rows', () => {
+	const { drift, details } = driftLog();
+	const course = parseCourse(
+		parseHtml(`
+		<h1 data-book="101">Mathe</h1>
+		<a class="hidden-print" href="vertretungsplan.php?id=7&halb=1">Andere</a>
+		<a class="btn btn-default hidden-print" href="meinunterricht.php?a=sus_view&id=8&halb=10">2. Halbjahr</a>
+		<a class="btn btn-default hidden-print" href="meinunterricht.php?a=sus_view&id=99&halb=1">1. Halbjahr</a>
+		<div id="history"><table><tbody>
+			<tr data-entry="55"><td>14.10.2026<br><small>08:00 - 09:30</small><td><b>x</b><td>anwesend
+			<tr data-entry="56"><td>15.10.2026<br><small>1.–2. Stunde</small><td><b>x</b><td>anwesend
+		</tbody></table></div>
+		<div id="marks"><table>
+			<tr><td>Klausur 1<td>Do, 17.09.<td>12
+			<tr><td>Kommentar: gut
+			<tr><td><td colspan="2">
+			<tr><td><td>Di, 20.10.
+		</table></div>
+		<div id="klausuren"></div><table id="attendanceTable"></table>`),
+		'101',
+		drift
+	);
+	expect(course.firstSemester).toBe('99');
+	expect(course.entries.map((entry) => entry.periods)).toEqual([
+		null,
+		{ from: 1, to: 2, label: '1.–2. Stunde' }
+	]);
+	expect(course.marks).toMatchObject([{ name: 'Klausur 1', comment: 'gut' }]);
+	expect(details).toEqual([
+		'A history row has unreadable periods.',
+		'A mark row has an unknown shape.'
+	]);
 });
 
 test('a course without a first-semester link has none', () => {

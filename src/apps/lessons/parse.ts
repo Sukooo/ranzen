@@ -102,12 +102,20 @@ export function parseCourse(
 	};
 }
 
-// Prefer a link to the course's own id, else the semester button, which is hidden in print.
+// Prefer a link to the course's own id, else the first-semester button, which is hidden in print.
 function firstSemester(document: Document, id: string): string | null {
-	const links = all('a[href*="halb=1"]', document);
-	const own = links.some((link) => queryParam(attr(link, 'href'), 'id') === id);
-	if (own) return id;
-	const button = links.find((link) => hasClass(link, 'hidden-print'));
+	const links = all('a[href]', document).filter((link) => {
+		const href = attr(link, 'href') ?? '';
+		return (
+			/(^|\/)meinunterricht\.php\?/.test(href) &&
+			queryParam(href, 'a') === 'sus_view' &&
+			queryParam(href, 'halb') === '1'
+		);
+	});
+	if (links.some((link) => queryParam(attr(link, 'href'), 'id') === id)) return id;
+	const button = links.find((link) =>
+		['btn', 'btn-default', 'hidden-print'].every((name) => hasClass(link, name))
+	);
 	return queryParam(attr(button, 'href'), 'id');
 }
 
@@ -211,8 +219,13 @@ function parseMarks(document: Document, drift: DriftSink): Mark[] {
 		const last = marks.at(-1);
 		if (name && date && value && !rest.length) {
 			marks.push({ name: text(name), date: text(date), value: text(value), comment: null });
-		} else if (name && !value && (!date || !text(name)) && last) {
-			last.comment = text(date ?? name).replace(/^[^:]*:\s*/, '') || null;
+		} else if (
+			last &&
+			name &&
+			!value &&
+			(!date || (!text(name) && attr(date, 'colspan') === '2'))
+		) {
+			last.comment = text(date ?? name).replace(/^[^:]*:\s*/, '') || last.comment;
 		} else drift('A mark row has an unknown shape.');
 	}
 	return marks;
@@ -315,7 +328,7 @@ function file(element: Element): EntryFile {
 
 function periods(label: string, drift: DriftSink): Periods | null {
 	if (!label) return null;
-	const match = /(\d+)\.?(?:\s*-\s*(\d+)\.?)?/.exec(label);
+	const match = /^(\d+)\.?(?:\s*[-–]\s*(\d+)\.?)?(?:\s*Stunden?)?$/.exec(label.trim());
 	if (!match) {
 		drift('A history row has unreadable periods.');
 		return null;
