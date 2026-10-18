@@ -1,2 +1,4 @@
 dist/
 bun.lock
+CHANGELOG.md
+.release-please-manifest.json
