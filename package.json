@@ -1,6 +1,6 @@
 {
 	"name": "@ranzenjs/client",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Typed client for Schulportal Hessen (SPH, LANIS)",
 	"license": "MIT",
 	"author": "Suko",

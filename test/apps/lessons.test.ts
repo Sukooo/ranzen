@@ -97,7 +97,7 @@ test('reads a course with its history, marks and attendance', () => {
 		marks: [{ name: 'Klausur 1', date: 'Do, 17.09.', value: '12', comment: 'gut gelöst' }],
 		exams: [],
 		attendance: { fehlstunden: 2 },
-		hasFirstSemester: true
+		firstSemester: '101'
 	});
 	expect(course.entries).toEqual([
 		{
@@ -126,6 +126,38 @@ test('reads a course with its history, marks and attendance', () => {
 			attendance: null
 		}
 	]);
+});
+
+test('reads legacy layouts of semester links, periods, names and comments', () => {
+	const course = parseCourse(
+		parseHtml(`
+		<h1 data-book="101">Mathe</h1>
+		<button class="btn btn-md dropdown-toggle" title="Muster, Max, Dr. (MUS)">MUS</button>
+		<a class="btn btn-default hidden-print" href="meinunterricht.php?a=sus_view&id=99&halb=1">1. Halbjahr</a>
+		<div id="history"><table><tbody>
+			<tr data-entry="55"><td>14.10.2026<br><small>1.-2.</small><td><b>Integrale</b><td>anwesend
+		</tbody></table></div>
+		<div id="marks"><table>
+			<tr><td>Klausur 1<td>Do, 17.09.<td>12
+			<tr><td><td colspan="2">Bemerkung: gut: sehr
+		</table></div>`),
+		'101'
+	);
+	expect(course).toMatchObject({
+		firstSemester: '99',
+		teachers: [{ code: 'MUS', firstName: 'Max, Dr.', lastName: 'Muster' }],
+		marks: [{ name: 'Klausur 1', comment: 'gut: sehr' }]
+	});
+	expect(course.entries[0]?.periods).toEqual({ from: 1, to: 2, label: '1.-2.' });
+});
+
+test('a course without a first-semester link has none', () => {
+	const course = parseCourse(
+		parseHtml(`<h1 data-book="101">Mathe</h1><div id="history"></div>
+		<a href="meinunterricht.php?a=sus_view&id=7&halb=1">Andere</a>`),
+		'101'
+	);
+	expect(course.firstSemester).toBeNull();
 });
 
 test('merges upcoming and past exams', () => {

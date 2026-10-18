@@ -105,8 +105,8 @@ export interface Course extends CourseRef {
 	marks: Mark[];
 	exams: Exam[];
 	attendance: Record<string, number>;
-	/** Whether the portal links this course's first semester. */
-	hasFirstSemester: boolean;
+	/** Id the portal links for this course's first semester; read it with `course(id, { semester: 1 })`. */
+	firstSemester: string | null;
 }
 
 export interface EntryRef {

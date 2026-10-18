@@ -98,10 +98,17 @@ export function parseCourse(
 		marks: parseMarks(document, drift),
 		exams: parseExams(document, drift),
 		attendance: hours(rows(one('#attendanceTable', document)), drift),
-		hasFirstSemester: all('a[href*="halb=1"]', document).some(
-			(link) => queryParam(attr(link, 'href'), 'id') === id
-		)
+		firstSemester: firstSemester(document, id)
 	};
+}
+
+// Prefer a link to the course's own id, else the semester button, which is hidden in print.
+function firstSemester(document: Document, id: string): string | null {
+	const links = all('a[href*="halb=1"]', document);
+	const own = links.some((link) => queryParam(attr(link, 'href'), 'id') === id);
+	if (own) return id;
+	const button = links.find((link) => hasClass(link, 'hidden-print'));
+	return queryParam(attr(button, 'href'), 'id');
 }
 
 // Entries carry their id in data-entry; rows without one are reported, never guessed.
@@ -196,7 +203,7 @@ function submission(group: Element, drift: DriftSink): Submission[] {
 	];
 }
 
-// Each mark is a row of name, date and value, optionally followed by a one-cell comment row.
+// Each mark is a row of name, date and value, optionally followed by a comment in its own row.
 function parseMarks(document: Document, drift: DriftSink): Mark[] {
 	const marks: Mark[] = [];
 	for (const row of rows(one('#marks', document))) {
@@ -204,8 +211,8 @@ function parseMarks(document: Document, drift: DriftSink): Mark[] {
 		const last = marks.at(-1);
 		if (name && date && value && !rest.length) {
 			marks.push({ name: text(name), date: text(date), value: text(value), comment: null });
-		} else if (name && !date && last) {
-			last.comment = text(name).replace(/^[^:]*:\s*/, '') || null;
+		} else if (name && !value && (!date || !text(name)) && last) {
+			last.comment = text(date ?? name).replace(/^[^:]*:\s*/, '') || null;
 		} else drift('A mark row has an unknown shape.');
 	}
 	return marks;
@@ -289,8 +296,12 @@ function hours(table: Element[], drift: DriftSink): Record<string, number> {
 function teacher(element: Element): Teacher {
 	const title = (attr(element, 'title') ?? '').replace(/\s*\(([^)]*)\)\s*$/, '');
 	const code = text(element) || /\(([^)]*)\)\s*$/.exec(attr(element, 'title') ?? '')?.[1] || null;
-	const [lastName, firstName] = title.split(',').map((part) => part.trim());
-	return { code, firstName: firstName || null, lastName: lastName || null };
+	const [lastName = '', ...firstNames] = title.split(',');
+	return {
+		code,
+		firstName: firstNames.join(',').trim() || null,
+		lastName: lastName.trim() || null
+	};
 }
 
 function file(element: Element): EntryFile {
@@ -304,7 +315,7 @@ function file(element: Element): EntryFile {
 
 function periods(label: string, drift: DriftSink): Periods | null {
 	if (!label) return null;
-	const match = /(\d+)\.(?:\s*-\s*(\d+)\.)?\s*Stunde/.exec(label);
+	const match = /(\d+)\.?(?:\s*-\s*(\d+)\.?)?/.exec(label);
 	if (!match) {
 		drift('A history row has unreadable periods.');
 		return null;
