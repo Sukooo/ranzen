@@ -77,6 +77,19 @@ export function text(node: Root | null | undefined, multiline = false): string {
 		.trim();
 }
 
+/** Visible text with its whitespace as written, only trimmed, for names callers store as keys. */
+export function rawText(node: Element | null | undefined, own = false): string {
+	const parts: string[] = [];
+	const walk = (current: AnyNode) => {
+		if (isText(current)) parts.push(current.data);
+		else if (!own && isTag(current) && !hasClass(current, 'hidden_encoded')) {
+			current.children.forEach(walk);
+		}
+	};
+	node?.children.forEach(walk);
+	return parts.join('').trim();
+}
+
 /** Only the element's own text, without that of badges or labels nested in it. */
 export function ownText(node: Element | null | undefined): string {
 	return (node?.children ?? [])
