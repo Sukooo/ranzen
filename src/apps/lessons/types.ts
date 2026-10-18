@@ -6,8 +6,9 @@ export interface Teacher {
 }
 
 export interface Periods {
-	from: number;
-	to: number;
+	/** Null with `to` when the label names no period numbers, e.g. "08:00 - 09:30". */
+	from: number | null;
+	to: number | null;
 	/** The portal's wording, unchanged, e.g. "1. - 2. Stunde". */
 	label: string;
 }
@@ -26,6 +27,7 @@ export interface EntryFile {
 
 export interface Submission {
 	id: string;
+	/** As written, so it can serve as a key. */
 	name: string;
 	open: boolean;
 	/** The portal's badge, e.g. "2" files handed in; null without one. */
@@ -81,6 +83,7 @@ export interface Overview {
 }
 
 export interface Mark {
+	/** As written, like `date`, so it can serve as a key. */
 	name: string;
 	/** As shown by the portal, which omits the year, e.g. "Do, 17.09.". */
 	date: string;

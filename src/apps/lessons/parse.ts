@@ -6,6 +6,7 @@ import {
 	hasClass,
 	one,
 	ownText,
+	rawText,
 	rows,
 	text,
 	type Document,
@@ -30,34 +31,30 @@ export function parseOverview(document: Document, drift: DriftSink = ignoreDrift
 	const folders = one('#mappen', document);
 	if (!folders) throw layoutChanged('#mappen on the lessons page');
 	const cards = all('.thumbnail', folders);
-	// An empty #mappen is a valid account without courses; course links outside cards are not.
+	// An empty #mappen is a valid account without courses; a skipped course would read as gone.
+	const links = all('a[href*="sus_view"]', folders);
 	const carded = new Set(cards.flatMap((card) => all('a[href*="sus_view"]', card)));
-	if (all('a[href*="sus_view"]', folders).some((link) => !carded.has(link))) {
-		drift('The lessons page lists courses outside known cards.');
+	if (links.some((link) => !carded.has(link))) {
+		throw layoutChanged('.thumbnail cards around every course in #mappen');
 	}
 	const latest = one('#aktuellTable', document);
 	if (!latest && one('tr[data-entry]', document)) {
 		drift('The lessons page lists entries outside #aktuellTable.');
 	}
+	const courses = cards.map((card) => {
+		const id = queryParam(attr(one('a[href*="sus_view"]', card), 'href'), 'id');
+		if (!id) throw layoutChanged('a course link in every .thumbnail card');
+		return {
+			id,
+			name: attr(one('h2 [title]', card), 'title') ?? text(one('h2', card)),
+			teachers: all('button.dropdown-toggle[title]', card).map(teacher),
+			marks: count(one('a.btn-info[href*="#leistungen"]', card)),
+			undoneHomework: count(one('a.btn-danger', card)),
+			upcomingEntries: count(one('a.btn-warning', card))
+		};
+	});
 	return {
-		courses: cards.flatMap((card) => {
-			const id = queryParam(attr(one('a[href*="sus_view"]', card), 'href'), 'id');
-			if (!id) {
-				drift('A course card has no course link.');
-				return [];
-			}
-			const name = attr(one('h2 [title]', card), 'title') ?? text(one('h2', card));
-			return [
-				{
-					id,
-					name,
-					teachers: all('button.dropdown-toggle[title]', card).map(teacher),
-					marks: count(one('a.btn-info[href*="#leistungen"]', card)),
-					undoneHomework: count(one('a.btn-danger', card)),
-					upcomingEntries: count(one('a.btn-warning', card))
-				}
-			];
-		}),
+		courses,
 		latest: entryRows(rows(latest), 'A latest entry', drift).map((row) => ({
 			course: { id: attr(row, 'data-book') ?? '', name: text(one('.name', row)) },
 			teachers: all('.teacher button[title]', row).map(teacher),
@@ -143,7 +140,7 @@ function historyEntry(row: Element, drift: DriftSink): Entry {
 	return {
 		...emptyEntry(attr(row, 'data-entry') ?? ''),
 		date: entryDate(text(when), 'A history row', drift),
-		periods: periods(text(when && one('small', when)), drift),
+		periods: periods(rawText(when && one('small', when)), drift),
 		topic: text(body && one(':scope > b', body)) || null,
 		content: text(contentOf(body), true) || null,
 		homework: historyHomework(body, drift),
@@ -203,7 +200,7 @@ function submission(group: Element, drift: DriftSink): Submission[] {
 	return [
 		{
 			id,
-			name: ownText(button),
+			name: rawText(button, true),
 			open: hasClass(button, 'btn-warning'),
 			uploaded: text(button && one('.badge', button)) || null,
 			due: day && time ? `${day}T${time[1]!.padStart(2, '0')}:${time[2]}` : day
@@ -218,7 +215,7 @@ function parseMarks(document: Document, drift: DriftSink): Mark[] {
 		const [name, date, value, ...rest] = cells(row);
 		const last = marks.at(-1);
 		if (name && date && value && !rest.length) {
-			marks.push({ name: text(name), date: text(date), value: text(value), comment: null });
+			marks.push({ name: rawText(name), date: rawText(date), value: text(value), comment: null });
 		} else if (
 			last &&
 			name &&
@@ -331,7 +328,7 @@ function periods(label: string, drift: DriftSink): Periods | null {
 	const match = /^(\d+)\.?(?:\s*[-–]\s*(\d+)\.?)?(?:\s*Stunden?)?$/.exec(label.trim());
 	if (!match) {
 		drift('A history row has unreadable periods.');
-		return null;
+		return { from: null, to: null, label };
 	}
 	const from = Number(match[1]);
 	return { from, to: match[2] ? Number(match[2]) : from, label };

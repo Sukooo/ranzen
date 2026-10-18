@@ -155,7 +155,7 @@ test('reads legacy layouts of semester links, periods, names and comments', () =
 	expect(course.entries[0]?.periods).toEqual({ from: 1, to: 2, label: '1.-2.' });
 });
 
-test('rejects look-alike semester links, periods and comment rows', () => {
+test('rejects look-alike semester links, periods and comment rows, keeping labels as written', () => {
 	const { drift, details } = driftLog();
 	const course = parseCourse(
 		parseHtml(`
@@ -166,6 +166,7 @@ test('rejects look-alike semester links, periods and comment rows', () => {
 		<div id="history"><table><tbody>
 			<tr data-entry="55"><td>14.10.2026<br><small>08:00 - 09:30</small><td><b>x</b><td>anwesend
 			<tr data-entry="56"><td>15.10.2026<br><small>1.–2. Stunde</small><td><b>x</b><td>anwesend
+			<tr data-entry="57"><td>16.10.2026<br><small> 3.&nbsp;-&nbsp;4.  Stunde </small><td><b>x</b><td>anwesend
 		</tbody></table></div>
 		<div id="marks"><table>
 			<tr><td>Klausur 1<td>Do, 17.09.<td>12
@@ -179,14 +180,29 @@ test('rejects look-alike semester links, periods and comment rows', () => {
 	);
 	expect(course.firstSemester).toBe('99');
 	expect(course.entries.map((entry) => entry.periods)).toEqual([
-		null,
-		{ from: 1, to: 2, label: '1.–2. Stunde' }
+		{ from: null, to: null, label: '08:00 - 09:30' },
+		{ from: 1, to: 2, label: '1.–2. Stunde' },
+		{ from: 3, to: 4, label: '3. - 4.  Stunde' }
 	]);
 	expect(course.marks).toMatchObject([{ name: 'Klausur 1', comment: 'gut' }]);
 	expect(details).toEqual([
 		'A history row has unreadable periods.',
 		'A mark row has an unknown shape.'
 	]);
+});
+
+test('keeps names that callers store as keys as written', () => {
+	const course = parseCourse(
+		parseHtml(`<h1 data-book="1">Mathe</h1>
+		<div id="history"><table><tr data-entry="5"><td>1.10.2026<td><b>x</b>
+			<div class="btn-group"><button class="btn btn-default">
+				<i class="fa fa-upload"></i> Abgabe&nbsp; 1 <span class="badge">2</span>
+			</button><a href="meinunterricht.php?a=sus_abgabe&id=3">o</a></div><td></table></div>
+		<div id="marks"><table><tr><td>Klausur&nbsp; 1<span class="hidden_encoded">9</span><td>Do,  17.09.<td>12</table></div>`),
+		'1'
+	);
+	expect(course.entries[0]?.submissions[0]?.name).toBe('Abgabe  1');
+	expect(course.marks[0]).toMatchObject({ name: 'Klausur  1', date: 'Do,  17.09.' });
 });
 
 test('a course without a first-semester link has none', () => {
@@ -231,7 +247,7 @@ test('known layouts report no drift', () => {
 test('reports drift instead of guessing', () => {
 	const { drift, details } = driftLog();
 	const overview = parseOverview(
-		parseHtml(`<div id="mappen"><div class="thumbnail"><h2>Neu</h2></div></div>
+		parseHtml(`<div id="mappen"></div>
 		<table id="aktuellTable"><tr><td>ohne id</table>`),
 		drift
 	);
@@ -251,7 +267,6 @@ test('reports drift instead of guessing', () => {
 		[]
 	]);
 	expect(details).toEqual([
-		'A course card has no course link.',
 		'A latest entry has no entry id.',
 		'The course page has no #attendanceTable.',
 		'A history row has no entry id.',
@@ -264,7 +279,7 @@ test('reports drift instead of guessing', () => {
 test('reports sections that moved instead of returning nothing', () => {
 	const { drift, details } = driftLog();
 	const overview = parseOverview(
-		parseHtml(`<div id="mappen"><div class="card"><a href="meinunterricht.php?a=sus_view&id=1">M</a></div></div>
+		parseHtml(`<div id="mappen"></div>
 		<table id="neu"><tr data-entry="5"><td>x</table>`),
 		drift
 	);
@@ -283,7 +298,6 @@ test('reports sections that moved instead of returning nothing', () => {
 		{ fehlstunden: 0 }
 	]);
 	expect(details).toEqual([
-		'The lessons page lists courses outside known cards.',
 		'The lessons page lists entries outside #aktuellTable.',
 		'A history row has no readable date.',
 		'A history row has unreadable periods.',
@@ -314,6 +328,15 @@ test('reports misnested cells instead of returning empty fields', () => {
 test('rejects unknown layouts', () => {
 	expect(failureCode(() => parseOverview(parseHtml('<p>Wartung</p>')))).toBe('LAYOUT_CHANGED');
 	expect(failureCode(() => parseCourse(parseHtml('<h1>Mathe</h1>'), '1'))).toBe('LAYOUT_CHANGED');
+	const link = (id: number) => `<a href="meinunterricht.php?a=sus_view&id=${id}">K</a>`;
+	for (const folders of [
+		`<div class="card">${link(1)}</div>`,
+		`<div class="thumbnail">${link(1)}</div><div class="card">${link(2)}</div>`,
+		`<div class="thumbnail">${link(1)}</div><div class="thumbnail"><h2>Neu</h2></div>`
+	]) {
+		const page = parseHtml(`<div id="mappen">${folders}</div>`);
+		expect(failureCode(() => parseOverview(page))).toBe('LAYOUT_CHANGED');
+	}
 });
 
 test('reads homework state from either badge and reports a missing one', () => {
@@ -334,17 +357,4 @@ test('reads homework state from either badge and reports a missing one', () => {
 		'A homework has no readable state.',
 		'A homework has no readable state.'
 	]);
-});
-
-test('reports course links outside cards next to known cards', () => {
-	const { drift, details } = driftLog();
-	const overview = parseOverview(
-		parseHtml(`<div id="mappen">
-			<div class="thumbnail"><h2>Mathe</h2><a href="meinunterricht.php?a=sus_view&id=1">M</a></div>
-			<div class="card"><h2>Physik</h2><a href="meinunterricht.php?a=sus_view&id=2">P</a></div>
-		</div>`),
-		drift
-	);
-	expect(overview.courses.map(({ id }) => id)).toEqual(['1']);
-	expect(details).toEqual(['The lessons page lists courses outside known cards.']);
 });
