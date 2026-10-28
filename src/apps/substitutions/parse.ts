@@ -19,7 +19,7 @@ import {
 	parseJson,
 	type DriftSink
 } from '../../util.js';
-import type { Day, Notice, Substitution } from './types.js';
+import type { Day, Notice, Rotation, Substitution } from './types.js';
 
 const FIELDS = {
 	Stunde: 'periods',
@@ -68,10 +68,12 @@ export function parsePlan(document: Document, drift: DriftSink = ignoreDrift): D
 		const entries = rows(table).filter((row) => !isPlaceholder(row));
 		const stamp = /(\d{2}\.\d{2}\.\d{4}) um ([01]\d|2[0-3]):([0-5]\d):([0-5]\d)/.exec(text(panel));
 		const stampDay = stamp && isoDate(stamp[1]!);
+		const week = text(one('.badge.woche', panel)) || null;
 		return [
 			{
 				date,
-				week: text(one('.badge.woche', panel)) || null,
+				week,
+				rotation: rotation(week, drift),
 				notices: parseNotices(panel),
 				substitutions: entries.map((row) => {
 					const columns = cells(row);
@@ -125,6 +127,7 @@ function substitution(
 	const entry: Substitution = {
 		date,
 		periods: values.Stunde ?? '',
+		periodNumbers: periodNumbers(values.Stunde ?? '', drift),
 		classes: null,
 		previousClasses: null,
 		substitute: null,
@@ -150,6 +153,26 @@ function substitution(
 		return [];
 	});
 	return entry;
+}
+
+// "A-Woche" or "WA-Woche" → "A".
+function rotation(label: string | null, drift: DriftSink): Rotation | null {
+	if (!label) return null;
+	const match = /^W?([AB])-?Woche$/i.exec(label);
+	if (!match) drift('A plan day has an unknown week label.');
+	return match ? (match[1]!.toUpperCase() as Rotation) : null;
+}
+
+// "3 - 4" → [3, 4]; break duties such as "2/3" (between periods 2 and 3) or "MP" (lunch) hold no lesson.
+function periodNumbers(label: string, drift: DriftSink): number[] {
+	const range = /^(\d{1,2})\.?(?:\s*[-–]\s*(\d{1,2})\.?)?$/.exec(label.trim());
+	const first = Number(range?.[1]);
+	const last = Number(range?.[2] ?? range?.[1]);
+	if (range && last >= first) return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+	if (!/^(?:\d{1,2}\s*\/\s*\d{1,2}|MP)$/i.test(label.trim())) {
+		drift('A substitution has periods in an unknown format.');
+	}
+	return [];
 }
 
 // An empty day is one cell spanning the table, e.g. "Keine Einträge!".

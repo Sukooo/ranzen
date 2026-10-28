@@ -14,6 +14,17 @@ describe('CookieJar', () => {
 		expect(jar.header(login)).toBe('shared=1; local=2');
 	});
 
+	test('enforces the __Host- and __Secure- name prefixes', () => {
+		const jar = new CookieJar();
+		jar.store('__Host-ok=1; Secure; Path=/', login);
+		jar.store('__Host-domain=1; Secure; Path=/; Domain=.schulportal.hessen.de', login);
+		jar.store('__Host-path=1; Secure; Path=/x', login);
+		jar.store('__Host-nopath=1; Secure', new URL('https://login.schulportal.hessen.de/login.php'));
+		jar.store('__Secure-ok=1; Secure', login);
+		jar.store('__Secure-plain=1', login);
+		expect(jar.header(login)).toBe('__Host-ok=1; __Secure-ok=1');
+	});
+
 	test('rejects domains the response host does not belong to', () => {
 		const jar = new CookieJar();
 		jar.store('evil=1; Domain=example.com', start);

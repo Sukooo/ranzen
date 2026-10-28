@@ -46,19 +46,30 @@ export function readState(text: string): ConnectionState {
 	return {
 		account: { schoolId, username },
 		secret: key,
-		cookies: cookies.map(({ name, value, domain, hostOnly, path, secure, expires }) =>
-			expires === undefined
-				? { name, value, domain, hostOnly, path, secure }
-				: { name, value, domain, hostOnly, path, secure, expires }
-		)
+		cookies: cookies.map(copyCookie)
 	};
+}
+
+// Only the known fields, so stray keys in stored state never reach the jar.
+export function copyCookie({
+	name,
+	value,
+	domain,
+	hostOnly,
+	path,
+	secure,
+	expires
+}: StoredCookie): StoredCookie {
+	return expires === undefined
+		? { name, value, domain, hostOnly, path, secure }
+		: { name, value, domain, hostOnly, path, secure, expires };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isCookie(value: unknown): value is StoredCookie {
+export function isCookie(value: unknown): value is StoredCookie {
 	return (
 		isRecord(value) &&
 		typeof value.name === 'string' &&

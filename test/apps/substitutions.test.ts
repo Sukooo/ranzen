@@ -25,15 +25,17 @@ test('reads days, notices and own substitutions', () => {
 			{
 				date: '2026-10-19',
 				week: 'A-Woche',
+				rotation: 'A',
 				notices: [{ title: 'Allgemein', lines: ['Hofdienst\n8a'] }],
 				updatedAt: '2026-10-16T11:58:40'
 			},
 			1
 		],
-		[{ date: '2026-10-20', week: null, notices: [], updatedAt: null }, 0]
+		[{ date: '2026-10-20', week: null, rotation: null, notices: [], updatedAt: null }, 0]
 	]);
 	expect(days[0]?.substitutions[0]).toMatchObject({
 		periods: '3 - 4',
+		periodNumbers: [3, 4],
 		classes: 'Q1',
 		teacher: 'DEF',
 		room: '101',
@@ -105,4 +107,46 @@ test('keeps numbers and never copies content-like names into drift', () => {
 		'A full plan field is not text.',
 		'The full plan has an unknown key (unreadable name).'
 	]);
+});
+
+test('reads lesson periods and leaves break duties without any', () => {
+	const { drift, details } = driftLog();
+	const labels = ['4', '3. - 4.', '7-8', '9 – 10', '5.', '2/3', '0/1', 'MP', '4 - 3', 'Abend'];
+	const entries = parseFullPlan(
+		JSON.stringify(labels.map((Stunde) => ({ Stunde }))),
+		'2026-10-20',
+		drift
+	);
+	expect(entries.map((entry) => entry.periodNumbers)).toEqual([
+		[4],
+		[3, 4],
+		[7, 8],
+		[9, 10],
+		[5],
+		[],
+		[],
+		[],
+		[],
+		[]
+	]);
+	expect(details).toEqual(Array(2).fill('A substitution has periods in an unknown format.'));
+});
+
+test('reads both week label styles as rotation', () => {
+	const { drift, details } = driftLog();
+	const day = (id: string, label: string) =>
+		`<div class="panel" id="tag${id}"><span class="badge woche">${label}</span>
+			<table id="vtable${id}"><thead><tr><th data-field="Stunde"></thead><tbody></tbody></table></div>`;
+	const days = parsePlan(
+		parseHtml(
+			day('19_10_2026', 'WA-Woche') + day('20_10_2026', 'WB-Woche') + day('21_10_2026', 'C-Woche')
+		),
+		drift
+	);
+	expect(days.map((entry) => [entry.week, entry.rotation])).toEqual([
+		['WA-Woche', 'A'],
+		['WB-Woche', 'B'],
+		['C-Woche', null]
+	]);
+	expect(details).toEqual(['A plan day has an unknown week label.']);
 });

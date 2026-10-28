@@ -7,8 +7,8 @@ does, keeps the session alive, and reads the portal's apps into plain, typed obj
 bun add @ranzenjs/client
 ```
 
-Runs on Bun and Node 22.1 or newer. It has three small dependencies (htmlparser2, domhandler,
-css-select) and no native code.
+Runs on Bun and Node 22.1 or newer. It has four small dependencies (htmlparser2, domhandler,
+css-select, and hash-wasm for Kurswahl Online) and no native code.
 
 ## Usage
 
@@ -80,6 +80,44 @@ that a session still works, so sign in again when one reports `SESSION_EXPIRED`.
 `timeoutMs` (default 15000) bounds each request, including the wait for every chunk of a body.
 `maxConcurrency` (default 4) caps parallel requests per connection. Extra calls wait for a free
 slot, and a download frees its slot once the headers arrive.
+
+## Kurswahl Online
+
+Many schools run their course timetable on [Kurswahl Online](https://www.kurswahl-online.de/).
+Its client stands on its own: a school may use it, Schulportal, or both, and neither needs the
+other.
+
+```ts
+import { createKurswahl } from '@ranzenjs/client/kurswahl';
+
+const kurswahl = createKurswahl({ onDrift: (drift) => console.warn('ranzen drift', drift) });
+const schools = await kurswahl.schools(); // [{ id: 'musterschule', name: '…' }, …], no sign-in needed
+const connection = await kurswahl.login({
+	school: 'musterschule',
+	username: 'max.muster',
+	password
+});
+
+const plan = await connection.timetable(); // the general plan, A and B weeks included
+const week = await connection.timetable({ week: '2025-08-25' }); // one week, one rotation
+const rotation = await connection.currentRotation(); // 'A', 'B', or null; this week
+await connection.logout();
+```
+
+Kurswahl lists only the courses the student takes, so treat it as the source of truth for them.
+Each lesson names its course, ISO weekday, period, room and `rotation` (`'A'`, `'B'`, or `null`
+for every week). Teachers come with their short code, which Schulportal uses too, and their
+salutation. Sign-in hashes the password with Argon2 the way the login page does, which takes a few
+seconds of CPU. The week list can still show last school year's dates, so ask
+`currentRotation()` for this week's rotation rather than picking a week by date.
+
+`exportState()`, `restore()`, `keepAlive()`, `keepWarm()` and `dispose()` work as they do for
+Schulportal, with requests one at a time, since each page hands out the next CSRF token. Export
+once the connection is idle, and let one connection at a time use a session.
+
+To line both up, substitution days carry `rotation` next to their `week` label, and each
+substitution has `periodNumbers` (`"3 - 4"` → `[3, 4]`). Break duties such as `"2/3"` or `"MP"`
+have none.
 
 ## Errors
 

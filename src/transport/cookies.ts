@@ -35,6 +35,7 @@ export class CookieJar {
 			secure: false
 		};
 		let maxAge: number | undefined;
+		let pathSet = false;
 		for (const attribute of attributes) {
 			const index = attribute.indexOf('=');
 			const key = (index < 0 ? attribute : attribute.slice(0, index)).trim().toLowerCase();
@@ -44,8 +45,10 @@ export class CookieJar {
 				if (!domainMatches(url.hostname, domain) || !domain.includes('.')) return;
 				cookie.domain = domain;
 				cookie.hostOnly = false;
-			} else if (key === 'path' && value.startsWith('/')) cookie.path = value;
-			else if (key === 'secure') cookie.secure = true;
+			} else if (key === 'path' && value.startsWith('/')) {
+				cookie.path = value;
+				pathSet = true;
+			} else if (key === 'secure') cookie.secure = true;
 			else if (key === 'max-age' && /^-?\d+$/.test(value)) maxAge = Number(value);
 			else if (key === 'expires') {
 				const expires = parseCookieDate(value);
@@ -53,6 +56,7 @@ export class CookieJar {
 			}
 		}
 		if (maxAge !== undefined) cookie.expires = this.now() + maxAge * 1000;
+		if (!prefixAllows(cookie, url, pathSet)) return;
 
 		const key = `${cookie.domain};${cookie.path};${cookie.name}`;
 		if (cookie.expires !== undefined && cookie.expires <= this.now()) this.cookies.delete(key);
@@ -103,6 +107,16 @@ export class CookieJar {
 			)
 			.sort((a, b) => b.path.length - a.path.length);
 	}
+}
+
+// RFC 6265bis §4.1.3: __Secure- needs Secure over https; __Host- also needs no Domain and an explicit Path=/.
+function prefixAllows(cookie: StoredCookie, url: URL, pathSet: boolean): boolean {
+	const name = cookie.name.toLowerCase();
+	const secure = cookie.secure && url.protocol === 'https:';
+	if (name.startsWith('__host-')) {
+		return secure && cookie.hostOnly && pathSet && cookie.path === '/';
+	}
+	return !name.startsWith('__secure-') || secure;
 }
 
 function domainMatches(host: string, domain: string): boolean {
