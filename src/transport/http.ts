@@ -9,6 +9,8 @@ export interface TransportSettings {
 	userAgent: string;
 	timeoutMs: number;
 	maxConcurrency: number;
+	/** Hosts requests may reach over https; defaults to Schulportal's. */
+	hosts?: ReadonlySet<string>;
 }
 
 export interface Exchange {
@@ -38,7 +40,7 @@ export interface StreamReply extends Head {
 }
 
 // The hosts sign-in and apps use; any other host, subdomain or port is a portal change.
-const PORTAL_HOSTS = new Set(
+export const PORTAL_HOSTS: ReadonlySet<string> = new Set(
 	['start', 'login', 'connect'].map((name) => `${name}.schulportal.hessen.de`)
 );
 const MAX_REDIRECTS = 10;
@@ -164,7 +166,7 @@ export class Transport {
 			exchange.multipart ?? (exchange.form && new URLSearchParams(exchange.form).toString());
 
 		for (let hop = 0; ; hop++) {
-			if (url.protocol !== 'https:' || !PORTAL_HOSTS.has(url.host)) {
+			if (url.protocol !== 'https:' || !(this.settings.hosts ?? PORTAL_HOSTS).has(url.host)) {
 				throw layoutChanged('a portal address');
 			}
 			const headers = new Headers(exchange.headers);
