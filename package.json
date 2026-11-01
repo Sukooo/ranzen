@@ -42,6 +42,10 @@
 			"types": "./dist/apps/catalog/index.d.ts",
 			"default": "./dist/apps/catalog/index.js"
 		},
+		"./calendar": {
+			"types": "./dist/apps/calendar/index.d.ts",
+			"default": "./dist/apps/calendar/index.js"
+		},
 		"./kurswahl": {
 			"types": "./dist/kurswahl/index.d.ts",
 			"default": "./dist/kurswahl/index.js"
