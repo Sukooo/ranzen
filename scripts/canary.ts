@@ -1,6 +1,7 @@
 // Runs every app against the live portal and says whose fault each failure is.
 // Exit 0: ranzen matches the portal. 1: ranzen needs an update. 2: could not tell (portal, network, account, setup).
 // Needs RANZEN_SCHOOL_ID, RANZEN_USERNAME and RANZEN_PASSWORD; prints no personal data.
+import { calendar } from '../src/apps/calendar/index.js';
 import { catalog } from '../src/apps/catalog/index.js';
 import { lessons } from '../src/apps/lessons/index.js';
 import { profile } from '../src/apps/profile/index.js';
@@ -82,6 +83,15 @@ async function run(connection: Connection): Promise<void> {
 	const plan = connection.open(substitutions);
 	await check('substitutions.plan', () => plan.plan());
 	await check('substitutions.full', () => plan.plan({ full: true }));
+	const dates = connection.open(calendar);
+	await check('calendar.categories', () => dates.categories());
+	const day = (offset: number) =>
+		new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+	const upcoming = await check('calendar.events', () =>
+		dates.events({ from: day(0), to: day(60) })
+	);
+	const first = upcoming?.[0];
+	if (first) await check('calendar.details', () => dates.details(first.id));
 	await check('keepAlive', () => connection.keepAlive());
 }
 
