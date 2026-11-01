@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Sukooo/ranzen/compare/v0.4.0...v0.4.1) (2026-11-01)
+
+
+### Features
+
+* **calendar:** add Kalender app with events, categories and event details ([8559602](https://github.com/Sukooo/ranzen/commit/8559602cd22de57919b3de3d81d2a5dfb9e22220))
+
 ## [0.4.0](https://github.com/Sukooo/ranzen/compare/v0.3.0...v0.4.0) (2026-10-28)
 
 
