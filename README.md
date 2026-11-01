@@ -37,6 +37,7 @@ Every portal feature is an app that you open on a connection. Opening makes no r
 | `@ranzenjs/client/lessons`       | Mein Unterricht | `overview()`, `course(id, { semester })`, `setHomeworkDone()`, `download()`, `downloadAll()` |
 | `@ranzenjs/client/substitutions` | Vertretungsplan | `plan({ full })`                                                                             |
 | `@ranzenjs/client/profile`       | Benutzerdaten   | `get()`                                                                                      |
+| `@ranzenjs/client/calendar`      | Kalender        | `events({ from, to })`, `categories()`, `details(id)`                                        |
 | `@ranzenjs/client/catalog`       | Start page      | `list()`, `offers(app)`                                                                      |
 
 Schools turn apps on and off. To find out whether an account has an app, ask
@@ -51,6 +52,31 @@ const file = await connection
 	.download({ course: '101', entry: '55', file: 'blatt.pdf' });
 await Bun.write('blatt.pdf', new Response(file.body));
 ```
+
+### Calendar
+
+```ts
+import { calendar } from '@ranzenjs/client/calendar';
+
+const dates = connection.open(calendar);
+const events = await dates.events({ from: '2026-10-01', to: '2026-10-31' });
+const categories = await dates.categories(); // { id, name, color }, as events refer to by categoryId
+```
+
+`events()` returns every event that overlaps the inclusive range, once per id. The portal has no
+recurrence, so each event is one occurrence. Dates and times are the portal's Europe/Berlin wall
+clock as written. ranzen never converts them through UTC, so `"2026-10-25"` and `"02:30"` mean
+exactly what the school entered. `endDate` is inclusive and never before `startDate`. All-day
+events have `startTime` and `endTime` set to `null`. Descriptions are plain text with their line
+breaks. The portal sometimes encodes them twice. ranzen then turns encoded `<br />` into line
+breaks and keeps any other encoded markup as visible text.
+
+The portal ends all-day events at `23:59` of their last day. Should one end at exactly midnight of
+a later day instead, ranzen reads that end as exclusive, the way calendar widgets send it: an event
+from `2026-10-19 00:00:00` to `2026-10-20 00:00:00` lasts only the 19th.
+
+`details(id)` loads the responsible person's display name and the target groups of one event. It
+reports `NOT_FOUND` for an unknown id.
 
 ### Sessions
 
