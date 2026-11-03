@@ -470,13 +470,36 @@ test('reads the upload answer per file beside the updated hand-in', () => {
 			<li> <b>bild.exe</b> <span class="label label-danger">Fehler</span> Dateityp nicht erlaubt </li>
 		</ul></div>`
 	);
-	expect(parseUploadResults(page, drift)).toEqual([
+	expect(parseUploadResults(page, ['loesung.pdf', 'bild.exe'], drift)).toEqual([
 		{ name: 'loesung.pdf', ok: true, status: 'erfolgreich', message: null },
 		{ name: 'bild.exe', ok: false, status: 'Fehler', message: 'Dateityp nicht erlaubt' }
 	]);
 	expect(parseSubmission(page, drift).files).toEqual([
 		{ id: '4', name: 'loesung.pdf', uploaded: '2026-11-03T19:25', deletable: true }
 	]);
-	expect(parseUploadResults(submissionPage('', UPLOAD_FORM), drift)).toEqual([]);
-	expect(details).toEqual(['The upload answer lists no files.']);
+	expect(details).toEqual([]);
+});
+
+test('leaves the outcome open for sent files the upload answer leaves out', () => {
+	const { drift, details } = driftLog();
+	const page = submissionPage(
+		'',
+		UPLOAD_FORM,
+		`<div class="col-md-12"><h3>Ergebnis des Uploads</h3><ul>
+			<li> <b>a.pdf</b> <span class="label label-success">erfolgreich</span> </li>
+			<li> <strong>b.pdf</strong> <span class="label label-danger">Fehler</span> </li>
+		</ul></div>`
+	);
+	expect(parseUploadResults(page, ['a.pdf', 'b.pdf'], drift)).toEqual([
+		{ name: 'a.pdf', ok: true, status: 'erfolgreich', message: null },
+		{ name: 'b.pdf', ok: null, status: null, message: null }
+	]);
+	expect(parseUploadResults(submissionPage('', UPLOAD_FORM), ['a.pdf'], drift)).toEqual([
+		{ name: 'a.pdf', ok: null, status: null, message: null }
+	]);
+	expect(details).toEqual([
+		'An upload result has an unknown shape.',
+		'The upload answer does not list every file.',
+		'The upload answer does not list every file.'
+	]);
 });

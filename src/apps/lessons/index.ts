@@ -119,7 +119,11 @@ export const lessons = defineApp<LessonsApi>({ id: 'lessons', page: PAGE }, (con
 		files.forEach((file, index) => form.append(`file${index + 1}`, file, file.name));
 		const document = await context.document({ path: PAGE, multipart: form, signal });
 		return {
-			results: parseUploadResults(document, context.drift),
+			results: parseUploadResults(
+				document,
+				files.map((file) => file.name),
+				context.drift
+			),
 			submission: parseSubmission(document, context.drift)
 		};
 	},

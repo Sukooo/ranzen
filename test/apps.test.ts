@@ -238,7 +238,10 @@ describe('app requests', () => {
 		const target = { course: '101', entry: '55', submission: '1' };
 		const files = [new File(['%PDF'], 'a.pdf'), new File(['x'], 'b.txt')];
 		const { results, submission } = await api.submit({ ...target, files });
-		expect(results).toEqual([{ name: 'a.pdf', ok: true, status: 'OK', message: null }]);
+		expect(results).toEqual([
+			{ name: 'a.pdf', ok: true, status: 'OK', message: null },
+			{ name: 'b.txt', ok: null, status: null, message: null }
+		]);
 		expect(submission).toMatchObject({ id: '1', open: false, files: [{ name: 'a.pdf' }] });
 		const form = sent[0]?.multipart;
 		expect(sent[0]?.url).toBe(`${START}meinunterricht.php`);

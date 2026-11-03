@@ -415,17 +415,22 @@ export function parseSubmission(
 }
 
 // The per-file report after an upload: name in <b>, outcome in a label, then an optional message.
+// Every sent file gets a result; one the report does not mention has an unknown outcome.
 export function parseUploadResults(
 	document: Document,
+	sent: readonly string[],
 	drift: DriftSink = ignoreDrift
 ): UploadResult[] {
 	const column = all('#content .col-md-12', document).find((c) =>
 		text(one('h3', c)).startsWith('Ergebnis des Uploads')
 	);
-	const results = (column ? all('li', column) : []).flatMap((item) => {
+	const results: UploadResult[] = (column ? all('li', column) : []).flatMap((item) => {
 		const name = one('b', item);
 		const label = one('.label', item);
-		if (!name || !label) return [];
+		if (!name || !label) {
+			drift('An upload result has an unknown shape.');
+			return [];
+		}
 		const message = text(item)
 			.replace(text(name), '')
 			.replace(text(label), '')
@@ -440,8 +445,12 @@ export function parseUploadResults(
 			}
 		];
 	});
-	if (!results.length) drift('The upload answer lists no files.');
-	return results;
+	const listed = new Set(results.map((result) => result.name));
+	const missing = sent
+		.filter((name) => !listed.has(name))
+		.slice(0, Math.max(0, sent.length - results.length));
+	if (missing.length) drift('The upload answer does not list every file.');
+	return [...results, ...missing.map((name) => ({ name, ok: null, status: null, message: null }))];
 }
 
 // Rules are lines of an icon, a label and a value badge, separated by <br>.

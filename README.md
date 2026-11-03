@@ -67,7 +67,8 @@ if (details.open) {
 }
 ```
 
-`results` says per file whether the portal took it, and `submission` is the hand-in afterwards.
+`results` says per sent file whether the portal took it (`ok: null` when its answer leaves
+that open), and `submission` is the hand-in afterwards.
 An upload is not idempotent, so after a failed `submit()` read `submission()` again before
 retrying. `downloadSubmitted()` fetches a handed-in file by its id, and `deleteSubmitted()`
 removes one; the portal asks for the account password again for that.

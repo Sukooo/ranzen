@@ -172,9 +172,10 @@ export interface SubmitResult {
 export interface UploadResult {
 	/** The file name as the portal lists it. */
 	name: string;
-	ok: boolean;
+	/** null when the portal's answer does not mention the file, so it may or may not have landed. */
+	ok: boolean | null;
 	/** The portal's label, e.g. "erfolgreich". */
-	status: string;
+	status: string | null;
 	/** e.g. that the portal renamed a file whose name was taken. */
 	message: string | null;
 }
