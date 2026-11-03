@@ -7,6 +7,7 @@ export interface Sent {
 	url: string;
 	cookie: string | null;
 	body: string | null;
+	multipart?: FormData;
 }
 
 export type Route = (request: Sent) => Response | Promise<Response> | undefined;
@@ -41,7 +42,8 @@ export function fakeFetch(...routes: Route[]): { fetch: FetchFunction; sent: Sen
 			method: init.method ?? 'GET',
 			url,
 			cookie: new Headers(init.headers).get('cookie'),
-			body: typeof init.body === 'string' ? init.body : null
+			body: typeof init.body === 'string' ? init.body : null,
+			...(init.body instanceof FormData && { multipart: init.body })
 		};
 		sent.push(request);
 		for (const route of routes) {

@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { parseCourse, parseOverview } from '../../src/apps/lessons/parse.js';
+import {
+	parseCourse,
+	parseOverview,
+	parseSubmission,
+	parseUploadResults
+} from '../../src/apps/lessons/parse.js';
 import { parseHtml } from '../../src/html.js';
 import { driftLog, failureCode } from '../failure.js';
 
@@ -356,5 +361,145 @@ test('reads homework state from either badge and reports a missing one', () => {
 	expect(details).toEqual([
 		'A homework has no readable state.',
 		'A homework has no readable state.'
+	]);
+});
+
+const RULES = `<h3>Vorgaben</h3>
+	<i class="fas fa-hourglass-start fa-fw"></i> Abgabe von
+	<span class="editable" data-value="28.10.2026 15:30" data-field="Von"> Mittwoch, den 28.10.26, ab 15:30 Uhr </span><br />
+	<i class="fas fa-hourglass-end fa-fw"></i> <b> bis
+	<span class="editable" data-value="04.11.2026 08:05" data-field="Bis"> Mittwoch, den 04.11.26, spätestens 8:05 Uhr </span></b><br />
+	<i class="fa fa-check-square-o fa-fw"></i> Abgabe mehrerer Dateien <span class="label label-success"> erlaubt</span><br />
+	<i class="fa fa-check-square-o fa-fw"></i> Abgabe beliebig häufig <span class="label label-danger">nicht erlaubt</span><br />
+	<i class="fa fa-eye-slash fa-fw"></i> Abgabe sichtbar für <span class="label label-success">Lehrkräfte der Kursmappe</span><br />
+	<i class="fa fa-trash-o fa-fw"></i> Dateien werden automatisch gelöscht am <span class="label label-info">23.11.2026</span><br />
+	<i class="fa fa-file fa-fw"></i> Erlaubte Dateitypen <span class="label label-warning">PDF, docx</span><br />
+	<i class="fa fa-file fa-fw"></i> maximale Dateigröße <span class="label label-warning">10,00 MB</span>`;
+
+function submissionPage(own: string, upload: string, result = '') {
+	return parseHtml(`<div id="content">
+		<h1 data-buch="101" data-eintrag="55" data-abgabe="1"> Aufgabe 3 </h1>
+		<div class="row">
+			<div class="col-md-12">
+				<a href="meinunterricht.php" class="btn btn-default">Alle Kursmappen</a>
+				<a href="meinunterricht.php?a=sus_view&id=101" class="btn btn-primary"><span class="fa"></span> Mathematik GK</a>
+			</div>
+			<div class="col-md-12">${RULES}</div>${result}
+			<div class="col-md-12"><a name="eigene"></a>${own}</div>
+			<div class="col-md-7"><h2>Dateien abgeben</h2>${upload}</div>
+		</div></div>`);
+}
+
+const UPLOAD_FORM = `<form method="post" enctype="multipart/form-data" action="meinunterricht.php">
+	<input type="hidden" name="a" value="sus_abgabe"><input type="hidden" name="b" value="101">
+	<div> Bitte sinnvoll benennen. <br /><br /></div>
+	<div class="form-group row"><input type="file" name="file1"></div>
+	<div class="form-group row"><input type="file" name="file2"></div>
+	<button type="submit" class="btn btn-primary">Dateien abgeben</button></form>`;
+
+test('reads an open hand-in with its rules and files', () => {
+	const { drift, details } = driftLog();
+	const submission = parseSubmission(
+		submissionPage(
+			`<h3>Eigene Dateien</h3><ul>
+				<li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=19"><i class="far fa-file-image"></i> loesung.jpg</a>
+					<small title="Uploadzeitpunkt">28.10.26 13:55</small> <span class="deleteFile" data-file="19"></span></li>
+			</ul>`,
+			UPLOAD_FORM
+		),
+		drift
+	);
+	expect(submission).toEqual({
+		id: '1',
+		name: 'Aufgabe 3',
+		course: { id: '101', name: 'Mathematik GK' },
+		entry: '55',
+		opens: '2026-10-28T15:30',
+		due: '2026-11-04T08:05',
+		open: true,
+		slots: 2,
+		multipleFiles: true,
+		repeatable: false,
+		visibleTo: 'Lehrkräfte der Kursmappe',
+		deletesOn: '2026-11-23',
+		fileTypes: ['PDF', 'DOCX'],
+		maxSize: '10,00 MB',
+		maxBytes: 10_000_000,
+		notice: 'Bitte sinnvoll benennen.',
+		files: [{ id: '19', name: 'loesung.jpg', uploaded: '2026-10-28T13:55', deletable: true }]
+	});
+	expect(details).toEqual([]);
+});
+
+test('reads a closed hand-in', () => {
+	const { drift, details } = driftLog();
+	const submission = parseSubmission(
+		submissionPage(
+			`<h3>Eigene Dateien</h3><ul><li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=7">abgabe.pdf</a>
+				<small title="Uploadzeitpunkt">01.11.26 9:02</small></li></ul>`,
+			'<div class="alert alert-warning">Die Abgabe ist noch nicht oder nicht mehr möglich!</div>'
+		),
+		drift
+	);
+	expect(submission).toMatchObject({ open: false, slots: 0, notice: null });
+	expect(submission.files).toEqual([
+		{ id: '7', name: 'abgabe.pdf', uploaded: '2026-11-01T09:02', deletable: false }
+	]);
+	expect(details).toEqual([]);
+});
+
+test('reports a changed hand-in page', () => {
+	expect(
+		failureCode(() => parseSubmission(parseHtml('<div id="content"><h1>Fehler</h1></div>')))
+	).toBe('LAYOUT_CHANGED');
+	const { drift, details } = driftLog();
+	parseSubmission(submissionPage('', ''), drift);
+	expect(details).toEqual(['The submission page says neither open nor closed.']);
+});
+
+test('reads the upload answer per file beside the updated hand-in', () => {
+	const { drift, details } = driftLog();
+	const page = submissionPage(
+		`<h3>Eigene Dateien</h3><ul>
+			<li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=4"><i class="far fa-file-pdf"></i> <b>loesung.pdf</b></a>
+				<small title="Uploadzeitpunkt">03.11.26 19:25</small> <button class="btn btn-danger btn-xs deleteFile" data-file="4"><i class="fa fa-trash-o"></i> Abgabe löschen</button></li>
+		</ul>`,
+		UPLOAD_FORM,
+		`<div class="col-md-12"><h3>Ergebnis des Uploads </h3><ul>
+			<li> <b>loesung.pdf</b> <span class="label label-success">erfolgreich</span> </li>
+			<li> <b>bild.exe</b> <span class="label label-danger">Fehler</span> Dateityp nicht erlaubt </li>
+		</ul></div>`
+	);
+	expect(parseUploadResults(page, ['loesung.pdf', 'bild.exe'], drift)).toEqual([
+		{ name: 'loesung.pdf', ok: true, status: 'erfolgreich', message: null },
+		{ name: 'bild.exe', ok: false, status: 'Fehler', message: 'Dateityp nicht erlaubt' }
+	]);
+	expect(parseSubmission(page, drift).files).toEqual([
+		{ id: '4', name: 'loesung.pdf', uploaded: '2026-11-03T19:25', deletable: true }
+	]);
+	expect(details).toEqual([]);
+});
+
+test('leaves the outcome open for sent files the upload answer leaves out', () => {
+	const { drift, details } = driftLog();
+	const page = submissionPage(
+		'',
+		UPLOAD_FORM,
+		`<div class="col-md-12"><h3>Ergebnis des Uploads</h3><ul>
+			<li> <b>a.pdf</b> <span class="label label-success">erfolgreich</span> </li>
+			<li> <strong>b.pdf</strong> <span class="label label-danger">Fehler</span> </li>
+		</ul></div>`
+	);
+	expect(parseUploadResults(page, ['a.pdf', 'b.pdf'], drift)).toEqual([
+		{ name: 'a.pdf', ok: true, status: 'erfolgreich', message: null },
+		{ name: 'b.pdf', ok: null, status: null, message: null }
+	]);
+	expect(parseUploadResults(submissionPage('', UPLOAD_FORM), ['a.pdf'], drift)).toEqual([
+		{ name: 'a.pdf', ok: null, status: null, message: null }
+	]);
+	expect(details).toEqual([
+		'An upload result has an unknown shape.',
+		'The upload answer does not list every file.',
+		'The upload answer does not list every file.'
 	]);
 });

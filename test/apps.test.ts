@@ -11,13 +11,22 @@ import {
 	type PortalOptions,
 	type RanzenError
 } from '../src/index.js';
+import { seal, unseal } from '../src/protocol/cipher.js';
 import { fakeFetch, portalRoutes, reply, type Route } from './fake-portal.js';
 
 const START = 'https://start.schulportal.hessen.de/';
 let state: string;
+let secret: Uint8Array;
 
 beforeAll(async () => {
-	const { fetch } = fakeFetch(portalRoutes());
+	const { fetch } = fakeFetch(
+		portalRoutes({
+			challenge: (key) => {
+				secret = key;
+				return seal(key, key);
+			}
+		})
+	);
 	state = (
 		await createPortal({ fetch }).login({ schoolId: 1234, username: 'max', password: 'geheim!pw' })
 	).exportState();
@@ -213,6 +222,60 @@ describe('app requests', () => {
 		});
 		const error = await caught(api.setHomeworkDone({ course: '101', entry: '56', done: false }));
 		expect(error.code).toBe('PORTAL_ERROR');
+	});
+
+	test('hands in files as the upload form does', async () => {
+		const { connection, sent } = connect(() =>
+			reply(
+				200,
+				`<div id="content"><h1 data-buch="101" data-eintrag="55" data-abgabe="1">Aufgabe</h1><div class="row">
+				<div class="col-md-12"><h3>Ergebnis des Uploads</h3><ul><li><b>a.pdf</b> <span class="label label-success">OK</span></li></ul></div>
+				<div class="col-md-12"><a name="eigene"></a><h3>Eigene Dateien</h3><ul><li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=4">a.pdf</a></li></ul></div>
+				<div class="col-md-7"><div class="alert alert-warning">Die Abgabe ist nicht mehr möglich!</div></div></div></div>`
+			)
+		);
+		const api = connection.open(lessons);
+		const target = { course: '101', entry: '55', submission: '1' };
+		const files = [new File(['%PDF'], 'a.pdf'), new File(['x'], 'b.txt')];
+		const { results, submission } = await api.submit({ ...target, files });
+		expect(results).toEqual([
+			{ name: 'a.pdf', ok: true, status: 'OK', message: null },
+			{ name: 'b.txt', ok: null, status: null, message: null }
+		]);
+		expect(submission).toMatchObject({ id: '1', open: false, files: [{ name: 'a.pdf' }] });
+		const form = sent[0]?.multipart;
+		expect(sent[0]?.url).toBe(`${START}meinunterricht.php`);
+		expect([...(form?.keys() ?? [])]).toEqual(['a', 'b', 'e', 'id', 'file1', 'file2']);
+		expect(form?.get('a')).toBe('sus_abgabe');
+		expect((form?.get('file2') as File).name).toBe('b.txt');
+		for (const count of [0, 6]) {
+			const many = Array.from({ length: count }, () => files[0]!);
+			expect((await caught(api.submit({ ...target, files: many }))).code).toBe('INVALID_OPTION');
+		}
+		expect(sent).toHaveLength(1);
+	});
+
+	test('downloads and deletes handed-in files', async () => {
+		const answers: Record<string, string> = { '19': '1', '20': '-1', '21': '-2', '22': 'x' };
+		const { connection, sent } = connect(({ method, body }) =>
+			method === 'GET'
+				? reply(200, 'data', { 'content-disposition': 'attachment; filename="loesung.jpg"' })
+				: reply(200, answers[new URLSearchParams(body ?? '').get('f') ?? ''] ?? '')
+		);
+		const api = connection.open(lessons);
+		const target = { course: '101', entry: '55', submission: '1' };
+		await api.downloadSubmitted({ ...target, file: '19' });
+		expect(sent[0]?.url).toBe(`${START}meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=19`);
+		await api.deleteSubmitted({ ...target, file: '19', password: 'geheim!pw' });
+		const { pw, ...form } = Object.fromEntries(new URLSearchParams(sent[1]?.body ?? ''));
+		expect(form).toEqual({ a: 'sus_abgabe', d: 'delete', b: '101', e: '55', id: '1', f: '19' });
+		expect(new TextDecoder().decode(unseal(pw ?? '', secret) ?? undefined)).toBe('geheim!pw');
+		const codes = await Promise.all(
+			['20', '21', '22'].map(async (file) =>
+				caught(api.deleteSubmitted({ ...target, file, password: 'falsch' }))
+			)
+		);
+		expect(codes.map(({ code }) => code)).toEqual(['AUTH_FAILED', 'PORTAL_ERROR', 'PORTAL_ERROR']);
 	});
 
 	test('loads the full substitution plan per day', async () => {
