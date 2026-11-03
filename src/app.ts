@@ -1,5 +1,6 @@
 import { RanzenError, fail, layoutChanged } from './errors.js';
 import { all, one, parseHtml, text, type Document } from './html.js';
+import { seal } from './protocol/cipher.js';
 import { PAGES } from './protocol/endpoints.js';
 import type { Account, Session } from './session.js';
 import type { Exchange } from './transport/http.js';
@@ -36,6 +37,8 @@ export interface AppContext {
 	page(request: PageRequest): Promise<Page>;
 	document(request: PageRequest): Promise<Document>;
 	download(request: PageRequest): Promise<Download>;
+	/** Encrypts a value the way the portal's own $.crypt() does, e.g. a password it asks for again. */
+	encrypt(value: string): string;
 	/** Reports a non-fatal mismatch with the portal, e.g. an unknown table column. */
 	drift(detail: string): void;
 }
@@ -70,6 +73,7 @@ export function createContext(session: Session, drift: (detail: string) => void)
 			return session.account;
 		},
 		drift,
+		encrypt: (value) => seal(value, session.secret),
 		async page(request) {
 			const exchange = toExchange(request);
 			const reply = await session.send(exchange);
