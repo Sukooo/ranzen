@@ -196,37 +196,66 @@ describe('events', () => {
 		]);
 	});
 
-	test('skips malformed events and reports them without their content', () => {
+	test('fails the whole list on an event it cannot read, without its content', () => {
+		for (const broken of [
+			null,
+			'Max Muster',
+			{ ...EVENT, Id: '' },
+			{ ...EVENT, Id: { geheim: 'Max Muster' } },
+			{ ...EVENT, title: '&lt;br&gt;' },
+			{ ...EVENT, Anfang: '19.10.2026 18:00' }
+		]) {
+			let error: unknown;
+			try {
+				parseEvents(events(EVENT, broken));
+			} catch (caught) {
+				error = caught;
+			}
+			expect(isRanzenError(error) && error.code).toBe('LAYOUT_CHANGED');
+			expect(String((error as Error).message)).not.toContain('Max');
+		}
+	});
+
+	test('reads an event without a readable end as starting only', () => {
 		const { drift, details } = driftLog();
 		const list = parseEvents(
 			events(
-				null,
-				'Max Muster',
-				{ ...EVENT, Id: '' },
-				{ ...EVENT, Id: { geheim: 'Max Muster' } },
-				{ ...EVENT, title: '&lt;br&gt;' },
-				{ ...EVENT, Anfang: '19.10.2026 18:00' },
-				{ ...EVENT, Ende: '2026-02-30 10:00:00' },
-				{ ...EVENT, Ende: undefined },
-				{ ...EVENT, Id: '2', allDay: 'true', Neu: 'vielleicht', LetzteAenderung: 'gestern' },
-				EVENT
+				{ ...EVENT, Id: '1', Ende: '2026-02-30 10:00:00' },
+				{ ...EVENT, Id: '2', Ende: undefined },
+				{ ...EVENT, Id: '3', Ende: null, allDay: true, Anfang: '2026-10-19 00:00:00' }
 			),
 			drift
 		);
+		expect(
+			list.map(({ id, startDate, endDate, startTime, endTime }) => [
+				id,
+				startDate,
+				endDate,
+				startTime,
+				endTime
+			])
+		).toEqual([
+			['1', '2026-10-19', '2026-10-19', '18:00', null],
+			['2', '2026-10-19', '2026-10-19', '18:00', null],
+			['3', '2026-10-19', '2026-10-19', null, null]
+		]);
+		expect(details).toEqual(['A calendar event has an unreadable end.']);
+	});
+
+	test('reports odd flags without dropping the event', () => {
+		const { drift, details } = driftLog();
+		const list = parseEvents(
+			events({ ...EVENT, allDay: 'true', Neu: 'vielleicht', LetzteAenderung: 'gestern' }),
+			drift
+		);
 		expect(list.map(({ id, allDay, isNew, updatedAt }) => [id, allDay, isNew, updatedAt])).toEqual([
-			['2', false, false, null],
-			['4711', false, true, '2026-10-16T11:58:40']
+			['4711', false, false, null]
 		]);
 		expect(details).toEqual([
-			...Array(2).fill('A calendar event is not an object.'),
-			...Array(2).fill('A calendar event has no id.'),
-			'A calendar event has no title.',
-			...Array(3).fill('A calendar event has no readable start and end.'),
 			'A calendar event has no allDay flag.',
 			'A calendar event has an unreadable change date.',
 			'A calendar event has an unknown flag value.'
 		]);
-		expect(details.join(' ')).not.toContain('Max');
 	});
 
 	test('rejects anything but a list of events', () => {
@@ -375,12 +404,12 @@ describe('app', () => {
 						Anfang: '2026-09-30 00:00:00',
 						Ende: '2026-10-01 00:00:00'
 					},
-					{ ...EVENT, Id: '' }
+					{ ...EVENT, Id: '6', Anfang: '2026-10-10 08:00:00', Ende: 'bald' }
 				)
 			)
 		);
 		const list = await api.events({ from: '2026-10-01', to: '2026-10-31' });
-		expect(list.map(({ id }) => id)).toEqual(['1', '2', '3']);
+		expect(list.map(({ id }) => id)).toEqual(['1', '2', '3', '6']);
 		expect(sent).toHaveLength(1);
 		expect([sent[0]?.method, sent[0]?.url]).toEqual(['POST', PAGE]);
 		expect(Object.fromEntries(new URLSearchParams(sent[0]?.body ?? ''))).toEqual({
@@ -389,7 +418,10 @@ describe('app', () => {
 			end: '2026-10-31',
 			s: ''
 		});
-		expect(seen).toEqual([{ app: 'calendar', detail: 'A calendar event has no id.' }]);
+		expect(seen).toEqual([{ app: 'calendar', detail: 'A calendar event has an unreadable end.' }]);
+		const broken = connect(() => reply(200, events(EVENT, { ...EVENT, Id: '' })));
+		const error = await caught(broken.api.events({ from: '2026-10-01', to: '2026-10-31' }));
+		expect(error.code).toBe('LAYOUT_CHANGED');
 	});
 
 	test('reads categories from the calendar page', async () => {

@@ -23,6 +23,7 @@ function addDays(date: string, days: number): string {
 	return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+// Callers treat the list as complete, so an unreadable event fails the whole read.
 export function parseEvents(body: string, drift: DriftSink = ignoreDrift): CalendarEvent[] {
 	const data = parseJson(body, 'calendar events');
 	if (!Array.isArray(data)) throw layoutChanged('calendar events as a list');
@@ -30,30 +31,28 @@ export function parseEvents(body: string, drift: DriftSink = ignoreDrift): Calen
 	for (const raw of data) {
 		const event = parseEvent(raw, drift);
 		// The same id twice is the same event; the first one wins.
-		if (event && !events.has(event.id)) events.set(event.id, event);
+		if (!events.has(event.id)) events.set(event.id, event);
 	}
 	return [...events.values()];
 }
 
-function parseEvent(raw: unknown, drift: DriftSink): CalendarEvent | null {
-	if (!isRecord(raw)) {
-		drift('A calendar event is not an object.');
-		return null;
-	}
+function parseEvent(raw: unknown, drift: DriftSink): CalendarEvent {
+	if (!isRecord(raw)) throw layoutChanged('every calendar event as an object');
 	const id = idOf(raw.Id);
 	const title = plain(raw.title);
 	const start = stamp(raw.Anfang);
+	if (!id || !title || !start) {
+		throw layoutChanged('an id, a title and a readable start on every calendar event');
+	}
 	const end = stamp(raw.Ende);
-	if (!id) drift('A calendar event has no id.');
-	else if (!title) drift('A calendar event has no title.');
-	else if (!start || !end) drift('A calendar event has no readable start and end.');
-	if (!id || !title || !start || !end) return null;
+	if (!end && raw.Ende != null && raw.Ende !== '') drift('A calendar event has an unreadable end.');
 
 	if (typeof raw.allDay !== 'boolean') drift('A calendar event has no allDay flag.');
 	const allDay = raw.allDay === true;
-	let last = end;
+	// Without a readable end the event is read as starting only.
+	let last = end ?? start;
 	// The portal ends all-day events at 23:59; an end at midnight of a later day is read as exclusive.
-	if (allDay && end.time === '00:00:00' && end.date > start.date) {
+	if (allDay && end && end.time === '00:00:00' && end.date > start.date) {
 		last = { date: addDays(end.date, -1), time: end.time };
 	}
 	if (`${last.date} ${last.time}` < `${start.date} ${start.time}`) last = start;
@@ -71,7 +70,7 @@ function parseEvent(raw: unknown, drift: DriftSink): CalendarEvent | null {
 		startDate: start.date,
 		endDate: last.date,
 		startTime: allDay ? null : start.time.slice(0, 5),
-		endTime: allDay ? null : last.time.slice(0, 5),
+		endTime: allDay || !end ? null : last.time.slice(0, 5),
 		updatedAt: changed && `${changed.date}T${changed.time}`,
 		isNew: flag(raw.Neu, drift),
 		isPublic: flag(raw.Oeffentlich, drift),

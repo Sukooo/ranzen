@@ -87,7 +87,10 @@ const categories = await dates.categories(); // { id, name, color }, as events r
 recurrence, so each event is one occurrence. Dates and times are the portal's Europe/Berlin wall
 clock as written. ranzen never converts them through UTC, so `"2026-10-25"` and `"02:30"` mean
 exactly what the school entered. `endDate` is inclusive and never before `startDate`. All-day
-events have `startTime` and `endTime` set to `null`. Descriptions are plain text with their line
+events have `startTime` and `endTime` set to `null`. An event without a readable end is read as
+starting only: `endDate` equals `startDate` and `endTime` is `null`. Since callers can treat the
+list as complete, an event without a readable id, title or start fails the whole call with
+`LAYOUT_CHANGED` instead of going missing. Descriptions are plain text with their line
 breaks. The portal sometimes encodes them twice. ranzen then turns encoded `<br />` into line
 breaks and keeps any other encoded markup as visible text.
 

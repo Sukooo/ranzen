@@ -26,6 +26,7 @@ export interface CalendarEvent {
 	endDate: string;
 	/** "HH:MM"; null for all-day events. */
 	startTime: string | null;
+	/** "HH:MM"; null for all-day events and for events the portal gives no end. */
 	endTime: string | null;
 	/** Last change as local portal time, e.g. "2026-10-16T11:58:40". */
 	updatedAt: string | null;
