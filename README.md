@@ -63,10 +63,11 @@ const target = { course: '101', entry: '55', submission: '1' };
 const details = await app.submission(target);
 if (details.open) {
 	const file = new File([await Bun.file('loesung.pdf').arrayBuffer()], 'loesung.pdf');
-	await app.submit({ ...target, files: [file] });
+	const { results, submission } = await app.submit({ ...target, files: [file] });
 }
 ```
 
+`results` says per file whether the portal took it, and `submission` is the hand-in afterwards.
 An upload is not idempotent, so after a failed `submit()` read `submission()` again before
 retrying. `downloadSubmitted()` fetches a handed-in file by its id, and `deleteSubmitted()`
 removes one; the portal asks for the account password again for that.

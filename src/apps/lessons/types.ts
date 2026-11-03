@@ -163,6 +163,12 @@ export interface SubmissionDetails {
 	files: SubmittedFile[];
 }
 
+export interface SubmitResult {
+	results: UploadResult[];
+	/** The hand-in as the portal shows it after the upload. */
+	submission: SubmissionDetails;
+}
+
 export interface UploadResult {
 	/** The file name as the portal lists it. */
 	name: string;

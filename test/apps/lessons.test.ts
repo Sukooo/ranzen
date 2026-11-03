@@ -376,7 +376,7 @@ const RULES = `<h3>Vorgaben</h3>
 	<i class="fa fa-file fa-fw"></i> Erlaubte Dateitypen <span class="label label-warning">PDF, docx</span><br />
 	<i class="fa fa-file fa-fw"></i> maximale Dateigröße <span class="label label-warning">10,00 MB</span>`;
 
-function submissionPage(own: string, upload: string) {
+function submissionPage(own: string, upload: string, result = '') {
 	return parseHtml(`<div id="content">
 		<h1 data-buch="101" data-eintrag="55" data-abgabe="1"> Aufgabe 3 </h1>
 		<div class="row">
@@ -384,7 +384,7 @@ function submissionPage(own: string, upload: string) {
 				<a href="meinunterricht.php" class="btn btn-default">Alle Kursmappen</a>
 				<a href="meinunterricht.php?a=sus_view&id=101" class="btn btn-primary"><span class="fa"></span> Mathematik GK</a>
 			</div>
-			<div class="col-md-12">${RULES}</div>
+			<div class="col-md-12">${RULES}</div>${result}
 			<div class="col-md-12"><a name="eigene"></a>${own}</div>
 			<div class="col-md-7"><h2>Dateien abgeben</h2>${upload}</div>
 		</div></div>`);
@@ -457,19 +457,26 @@ test('reports a changed hand-in page', () => {
 	expect(details).toEqual(['The submission page says neither open nor closed.']);
 });
 
-test('reads the upload answer per file', () => {
+test('reads the upload answer per file beside the updated hand-in', () => {
 	const { drift, details } = driftLog();
-	const results = parseUploadResults(
-		parseHtml(`<div id="content"><ul>
-			<li><b>loesung.pdf</b> <span class="label label-success">OK</span></li>
-			<li><b>bild.exe</b> <span class="label label-danger">Fehler</span> Dateityp nicht erlaubt</li>
-		</ul></div>`),
-		drift
+	const page = submissionPage(
+		`<h3>Eigene Dateien</h3><ul>
+			<li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=4"><i class="far fa-file-pdf"></i> <b>loesung.pdf</b></a>
+				<small title="Uploadzeitpunkt">03.11.26 19:25</small> <button class="btn btn-danger btn-xs deleteFile" data-file="4"><i class="fa fa-trash-o"></i> Abgabe löschen</button></li>
+		</ul>`,
+		UPLOAD_FORM,
+		`<div class="col-md-12"><h3>Ergebnis des Uploads </h3><ul>
+			<li> <b>loesung.pdf</b> <span class="label label-success">erfolgreich</span> </li>
+			<li> <b>bild.exe</b> <span class="label label-danger">Fehler</span> Dateityp nicht erlaubt </li>
+		</ul></div>`
 	);
-	expect(results).toEqual([
-		{ name: 'loesung.pdf', ok: true, status: 'OK', message: null },
+	expect(parseUploadResults(page, drift)).toEqual([
+		{ name: 'loesung.pdf', ok: true, status: 'erfolgreich', message: null },
 		{ name: 'bild.exe', ok: false, status: 'Fehler', message: 'Dateityp nicht erlaubt' }
 	]);
-	expect(parseUploadResults(parseHtml('<div id="content"></div>'), drift)).toEqual([]);
+	expect(parseSubmission(page, drift).files).toEqual([
+		{ id: '4', name: 'loesung.pdf', uploaded: '2026-11-03T19:25', deletable: true }
+	]);
+	expect(parseUploadResults(submissionPage('', UPLOAD_FORM), drift)).toEqual([]);
 	expect(details).toEqual(['The upload answer lists no files.']);
 });

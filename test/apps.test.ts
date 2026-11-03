@@ -228,15 +228,18 @@ describe('app requests', () => {
 		const { connection, sent } = connect(() =>
 			reply(
 				200,
-				'<div id="content"><ul><li><b>a.pdf</b> <span class="label label-success">OK</span></li></ul></div>'
+				`<div id="content"><h1 data-buch="101" data-eintrag="55" data-abgabe="1">Aufgabe</h1><div class="row">
+				<div class="col-md-12"><h3>Ergebnis des Uploads</h3><ul><li><b>a.pdf</b> <span class="label label-success">OK</span></li></ul></div>
+				<div class="col-md-12"><a name="eigene"></a><h3>Eigene Dateien</h3><ul><li><a href="meinunterricht.php?a=downloadFile&id=101&e=55&abg=1&f=4">a.pdf</a></li></ul></div>
+				<div class="col-md-7"><div class="alert alert-warning">Die Abgabe ist nicht mehr möglich!</div></div></div></div>`
 			)
 		);
 		const api = connection.open(lessons);
 		const target = { course: '101', entry: '55', submission: '1' };
 		const files = [new File(['%PDF'], 'a.pdf'), new File(['x'], 'b.txt')];
-		expect(await api.submit({ ...target, files })).toEqual([
-			{ name: 'a.pdf', ok: true, status: 'OK', message: null }
-		]);
+		const { results, submission } = await api.submit({ ...target, files });
+		expect(results).toEqual([{ name: 'a.pdf', ok: true, status: 'OK', message: null }]);
+		expect(submission).toMatchObject({ id: '1', open: false, files: [{ name: 'a.pdf' }] });
 		const form = sent[0]?.multipart;
 		expect(sent[0]?.url).toBe(`${START}meinunterricht.php`);
 		expect([...(form?.keys() ?? [])]).toEqual(['a', 'b', 'e', 'id', 'file1', 'file2']);

@@ -8,7 +8,7 @@ import type {
 	Overview,
 	SubmissionDetails,
 	SubmissionRef,
-	UploadResult
+	SubmitResult
 } from './types.js';
 
 export type * from './types.js';
@@ -37,12 +37,9 @@ export interface LessonsApi {
 	submission(target: SubmissionRef, options?: SignalOption): Promise<SubmissionDetails>;
 	/**
 	 * Hands in up to five files in one upload; not idempotent on retry. Each result says how the
-	 * portal took a file; read submission() again for the files it now holds.
+	 * portal took a file, and `submission` is the hand-in the portal shows afterwards.
 	 */
-	submit(
-		target: SubmissionRef & { files: File[] },
-		options?: SignalOption
-	): Promise<UploadResult[]>;
+	submit(target: SubmissionRef & { files: File[] }, options?: SignalOption): Promise<SubmitResult>;
 	/** A handed-in file, by SubmittedFile.id. */
 	downloadSubmitted(
 		target: SubmissionRef & { file: string },
@@ -120,10 +117,11 @@ export const lessons = defineApp<LessonsApi>({ id: 'lessons', page: PAGE }, (con
 		form.append('e', entry);
 		form.append('id', submission);
 		files.forEach((file, index) => form.append(`file${index + 1}`, file, file.name));
-		return parseUploadResults(
-			await context.document({ path: PAGE, multipart: form, signal }),
-			context.drift
-		);
+		const document = await context.document({ path: PAGE, multipart: form, signal });
+		return {
+			results: parseUploadResults(document, context.drift),
+			submission: parseSubmission(document, context.drift)
+		};
 	},
 
 	downloadSubmitted({ course, entry, submission, file }, { signal } = {}) {

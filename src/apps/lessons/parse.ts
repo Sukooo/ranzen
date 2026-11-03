@@ -419,7 +419,10 @@ export function parseUploadResults(
 	document: Document,
 	drift: DriftSink = ignoreDrift
 ): UploadResult[] {
-	const results = all('#content li', document).flatMap((item) => {
+	const column = all('#content .col-md-12', document).find((c) =>
+		text(one('h3', c)).startsWith('Ergebnis des Uploads')
+	);
+	const results = (column ? all('li', column) : []).flatMap((item) => {
 		const name = one('b', item);
 		const label = one('.label', item);
 		if (!name || !label) return [];
