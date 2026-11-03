@@ -24,7 +24,10 @@ import type {
 	Overview,
 	Periods,
 	Submission,
-	Teacher
+	SubmissionDetails,
+	SubmittedFile,
+	Teacher,
+	UploadResult
 } from './types.js';
 
 export function parseOverview(document: Document, drift: DriftSink = ignoreDrift): Overview {
@@ -350,4 +353,153 @@ function emptyEntry(id: string): Entry {
 		submissions: [],
 		attendance: null
 	};
+}
+
+// One hand-in page: its rules, then the own files, then the upload form or a closed notice.
+export function parseSubmission(
+	document: Document,
+	drift: DriftSink = ignoreDrift
+): SubmissionDetails {
+	const heading = one('#content h1[data-abgabe]', document);
+	if (!heading) throw layoutChanged('h1[data-abgabe] on the submission page');
+	const columns = all('#content .row > .col-md-12', document);
+	const rules = columns.find((column) => text(one('h3', column)) === 'Vorgaben');
+	const own = columns.find((column) => one('a[name="eigene"]', column));
+	if (!rules) drift('The submission page has no rules.');
+	if (!own) drift('The submission page has no own files.');
+	const form = one('#content form input[name="a"][value="sus_abgabe"]', document)?.parent;
+	const slots = form ? all('input[type="file"]', form as Element).length : 0;
+	if (!form && !one('#content .col-md-7 .alert-warning', document)) {
+		drift('The submission page says neither open nor closed.');
+	}
+	const course = one('#content a.btn-primary[href*="sus_view"]', document);
+	const details: SubmissionDetails = {
+		id: attr(heading, 'data-abgabe') ?? '',
+		name: rawText(heading),
+		course: { id: queryParam(attr(course, 'href'), 'id') ?? '', name: text(course) },
+		entry: attr(heading, 'data-eintrag') ?? '',
+		opens: editableTime(rules, 'Von', drift),
+		due: editableTime(rules, 'Bis', drift),
+		open: slots > 0,
+		slots,
+		multipleFiles: null,
+		repeatable: null,
+		visibleTo: null,
+		deletesOn: null,
+		fileTypes: [],
+		maxSize: null,
+		maxBytes: null,
+		notice: text(form && one('div:not([class])', form as Element), true) || null,
+		files: own ? all('ul > li', own).map((item) => submittedFile(item, drift)) : []
+	};
+	for (const [label, value] of rules ? ruleLabels(rules) : []) {
+		const valueText = text(value);
+		if (label.startsWith('Abgabe mehrerer Dateien')) details.multipleFiles = allowed(valueText);
+		else if (label.startsWith('Abgabe beliebig häufig')) details.repeatable = allowed(valueText);
+		else if (label.startsWith('Abgabe sichtbar für')) details.visibleTo = valueText || null;
+		else if (label.startsWith('Dateien werden automatisch gelöscht')) {
+			details.deletesOn = isoDate(valueText);
+		} else if (label.startsWith('Erlaubte Dateitypen')) {
+			details.fileTypes = valueText
+				.split(',')
+				.map((type) => type.trim().toUpperCase())
+				.filter(Boolean);
+		} else if (label.startsWith('maximale Dateigröße')) {
+			details.maxSize = valueText || null;
+			details.maxBytes = bytes(valueText);
+			if (valueText && details.maxBytes === null)
+				drift('A submission has an unreadable size limit.');
+		} else drift('A submission has an unknown rule.');
+	}
+	return details;
+}
+
+// The per-file report after an upload: name in <b>, outcome in a label, then an optional message.
+export function parseUploadResults(
+	document: Document,
+	drift: DriftSink = ignoreDrift
+): UploadResult[] {
+	const results = all('#content li', document).flatMap((item) => {
+		const name = one('b', item);
+		const label = one('.label', item);
+		if (!name || !label) return [];
+		const message = text(item)
+			.replace(text(name), '')
+			.replace(text(label), '')
+			.replace(/^[\s:–-]+/, '')
+			.trim();
+		return [
+			{
+				name: text(name),
+				ok: hasClass(label, 'label-success'),
+				status: text(label),
+				message: message || null
+			}
+		];
+	});
+	if (!results.length) drift('The upload answer lists no files.');
+	return results;
+}
+
+// Rules are lines of an icon, a label and a value badge, separated by <br>.
+function ruleLabels(rules: Element): [string, Element][] {
+	const pairs: [string, Element][] = [];
+	let label = '';
+	for (const node of rules.children) {
+		if (node.type === 'text') label += node.data;
+		else if (node.type === 'tag' && node.name === 'br') label = '';
+		else if (node.type === 'tag' && hasClass(node, 'label')) {
+			pairs.push([label.replace(/\s+/g, ' ').trim(), node]);
+			label = '';
+		}
+	}
+	return pairs;
+}
+
+function allowed(value: string): boolean | null {
+	if (/^nicht erlaubt$/i.test(value)) return false;
+	if (/^erlaubt$/i.test(value)) return true;
+	return null;
+}
+
+const UNITS: Record<string, number> = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9 };
+
+function bytes(value: string): number | null {
+	const match = /^([\d.]+(?:,\d+)?)\s*([KMG]?B)$/i.exec(value.trim());
+	if (!match) return null;
+	const amount = Number(match[1]!.replace(/\./g, '').replace(',', '.'));
+	return Math.floor(amount * UNITS[match[2]!.toUpperCase()]!);
+}
+
+// The rule spans carry the moment machine-readable, e.g. data-value="04.11.2026 15:30".
+function editableTime(rules: Element | undefined, field: string, drift: DriftSink): string | null {
+	const span = rules && one(`.editable[data-field="${field}"]`, rules);
+	if (!span) return null;
+	const value = attr(span, 'data-value') ?? '';
+	const time = localTime(value, isoDate(value));
+	if (!time) drift('A submission has an unreadable time.');
+	return time;
+}
+
+// Upload times are written with two-digit years, e.g. "28.10.26 13:55".
+function submittedFile(item: Element, drift: DriftSink): SubmittedFile {
+	const link = one('a[href*="downloadFile"]', item);
+	const stamp = text(one('[title="Uploadzeitpunkt"]', item));
+	const short = /(\d{1,2})\.(\d{1,2})\.(\d{2})\b/.exec(stamp);
+	const day = short ? isoDate(`${short[1]}.${short[2]}.20${short[3]}`) : isoDate(stamp);
+	const uploaded = localTime(stamp, day);
+	if (stamp && !uploaded) drift('A submitted file has an unreadable upload time.');
+	const remove = one('.deleteFile[data-file]', item);
+	const name = link ? text(link) : ownText(item);
+	return {
+		id: attr(remove, 'data-file') ?? queryParam(attr(link, 'href'), 'f'),
+		name,
+		uploaded,
+		deletable: !!remove
+	};
+}
+
+function localTime(value: string, day: string | null): string | null {
+	const time = /\b([01]?\d|2[0-3]):([0-5]\d)\b/.exec(value);
+	return day && time ? `${day}T${time[1]!.padStart(2, '0')}:${time[2]}` : day;
 }

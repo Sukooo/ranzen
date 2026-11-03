@@ -32,13 +32,13 @@ await connection.logout();
 
 Every portal feature is an app that you open on a connection. Opening makes no request.
 
-| Import                           | App             | Calls                                                                                        |
-| -------------------------------- | --------------- | -------------------------------------------------------------------------------------------- |
-| `@ranzenjs/client/lessons`       | Mein Unterricht | `overview()`, `course(id, { semester })`, `setHomeworkDone()`, `download()`, `downloadAll()` |
-| `@ranzenjs/client/substitutions` | Vertretungsplan | `plan({ full })`                                                                             |
-| `@ranzenjs/client/profile`       | Benutzerdaten   | `get()`                                                                                      |
-| `@ranzenjs/client/calendar`      | Kalender        | `events({ from, to })`, `categories()`, `details(id)`                                        |
-| `@ranzenjs/client/catalog`       | Start page      | `list()`, `offers(app)`                                                                      |
+| Import                           | App             | Calls                                                                                                                                                                |
+| -------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@ranzenjs/client/lessons`       | Mein Unterricht | `overview()`, `course(id, { semester })`, `setHomeworkDone()`, `download()`, `downloadAll()`, `submission()`, `submit()`, `downloadSubmitted()`, `deleteSubmitted()` |
+| `@ranzenjs/client/substitutions` | Vertretungsplan | `plan({ full })`                                                                                                                                                     |
+| `@ranzenjs/client/profile`       | Benutzerdaten   | `get()`                                                                                                                                                              |
+| `@ranzenjs/client/calendar`      | Kalender        | `events({ from, to })`, `categories()`, `details(id)`                                                                                                                |
+| `@ranzenjs/client/catalog`       | Start page      | `list()`, `offers(app)`                                                                                                                                              |
 
 Schools turn apps on and off. To find out whether an account has an app, ask
 `connection.open(catalog).offers(lessons)`.
@@ -52,6 +52,24 @@ const file = await connection
 	.download({ course: '101', entry: '55', file: 'blatt.pdf' });
 await Bun.write('blatt.pdf', new Response(file.body));
 ```
+
+### Hand-ins
+
+Entries list their hand-ins in `entry.submissions`. `submission()` reads one hand-in's rules
+and the files already handed in; `submit()` uploads up to five files while it is open:
+
+```ts
+const target = { course: '101', entry: '55', submission: '1' };
+const details = await app.submission(target);
+if (details.open) {
+	const file = new File([await Bun.file('loesung.pdf').arrayBuffer()], 'loesung.pdf');
+	await app.submit({ ...target, files: [file] });
+}
+```
+
+An upload is not idempotent, so after a failed `submit()` read `submission()` again before
+retrying. `downloadSubmitted()` fetches a handed-in file by its id, and `deleteSubmitted()`
+removes one; the portal asks for the account password again for that.
 
 ### Calendar
 

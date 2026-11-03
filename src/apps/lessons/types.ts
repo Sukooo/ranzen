@@ -116,3 +116,59 @@ export interface EntryRef {
 	course: string;
 	entry: string;
 }
+
+export interface SubmissionRef extends EntryRef {
+	/** Submission.id of the entry, e.g. "1". */
+	submission: string;
+}
+
+export interface SubmittedFile {
+	/** For downloadSubmitted() and deleteSubmitted(); null once the portal has deleted the file. */
+	id: string | null;
+	name: string;
+	/** Local date-time of the upload, e.g. "2026-10-28T13:55". */
+	uploaded: string | null;
+	/** The portal offers to delete it, which takes the account password. */
+	deletable: boolean;
+}
+
+export interface SubmissionDetails {
+	id: string;
+	/** As written, matching Submission.name. */
+	name: string;
+	course: CourseRef;
+	entry: string;
+	/** Local date-times the portal accepts files between, e.g. "2026-11-04T15:30". */
+	opens: string | null;
+	due: string | null;
+	/** The portal accepts files right now. */
+	open: boolean;
+	/** Files one submit() may carry; 0 while closed. */
+	slots: number;
+	/** Null when the page does not say. */
+	multipleFiles: boolean | null;
+	repeatable: boolean | null;
+	/** As shown, e.g. "Lehrkräfte der Kursmappe". */
+	visibleTo: string | null;
+	/** ISO calendar date the portal deletes the files on. */
+	deletesOn: string | null;
+	/** Upper-case extensions, e.g. ["PDF", "PNG"]; empty when the page names none. */
+	fileTypes: string[];
+	/** As shown, e.g. "10,00 MB". */
+	maxSize: string | null;
+	/** maxSize in decimal bytes, so never above what the portal accepts. */
+	maxBytes: number | null;
+	/** The hint above the upload form, e.g. how to name files; null while closed. */
+	notice: string | null;
+	files: SubmittedFile[];
+}
+
+export interface UploadResult {
+	/** The file name as the portal lists it. */
+	name: string;
+	ok: boolean;
+	/** The portal's label, e.g. "erfolgreich". */
+	status: string;
+	/** e.g. that the portal renamed a file whose name was taken. */
+	message: string | null;
+}
