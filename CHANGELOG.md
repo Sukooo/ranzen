@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.2](https://github.com/Sukooo/ranzen/compare/v0.4.1...v0.4.2) (2026-11-03)
+
+
+### Features
+
+* **lessons:** hand in files ([#9](https://github.com/Sukooo/ranzen/issues/9)) ([bca2a48](https://github.com/Sukooo/ranzen/commit/bca2a48f3039e84da7a75076c5931ab355a1c85a))
+
+
+### Bug Fixes
+
+* **calendar:** never drop events from the list silently ([#10](https://github.com/Sukooo/ranzen/issues/10)) ([0a36f47](https://github.com/Sukooo/ranzen/commit/0a36f4796517946700ec51822c6cbb0ba5bea596)), closes [#8](https://github.com/Sukooo/ranzen/issues/8)
+
 ## [0.4.1](https://github.com/Sukooo/ranzen/compare/v0.4.0...v0.4.1) (2026-11-01)
 
 
